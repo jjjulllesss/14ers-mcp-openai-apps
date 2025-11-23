@@ -1,0 +1,14 @@
+/* Mountains widget styles - using Tailwind, minimal custom CSS needed */
+
+/* Leaflet map styles */
+.leaflet-container {
+  height: 100% !important;
+  width: 100% !important;
+  z-index: 0;
+  position: relative;
+}
+
+.custom-marker {
+  background: transparent !important;
+  border: none !important;
+}

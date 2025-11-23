@@ -1,0 +1,42 @@
+{
+  "name": "14ers-mcp-openai",
+  "version": "1.0.0",
+  "description": "Colorado 14ers MCP server with OpenAI Apps SDK widgets",
+  "main": "server.py",
+  "scripts": {
+    "build": "tsx ./build-all.mts",
+    "build:supabase": "BASE_URL=https://kxvaohpqmhdtptwnaoyb.supabase.co/storage/v1/object/public/widgets tsx ./build-all.mts",
+    "upload:supabase": "node upload-to-supabase.mjs",
+    "deploy:supabase": "pnpm run build:supabase && pnpm run upload:supabase",
+    "serve": "serve -s ./assets -p 4444 --cors",
+    "dev": "vite --config vite.config.mts",
+    "tsc": "tsc -b",
+    "tsc:app": "tsc -p tsconfig.app.json",
+    "tsc:node": "tsc -p tsconfig.node.json"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.11",
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^4.5.2",
+    "autoprefixer": "^10.4.21",
+    "fast-glob": "^3.3.3",
+    "postcss": "^8.5.6",
+    "serve": "^14.2.4",
+    "tailwindcss": "^4.1.11",
+    "tsx": "^4.20.4",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.1"
+  },
+  "dependencies": {
+    "@openai/apps-sdk-ui": "^0.1.0",
+    "@types/leaflet": "^1.9.8",
+    "leaflet": "^1.9.4",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  }
+}
