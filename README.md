@@ -6,6 +6,7 @@ An MCP server for querying Colorado 14ers data with OpenAI Apps SDK widgets buil
 
 - Node.js 18+
 - Python 3.10+
+- uv (Python package manager) - [Install uv](https://github.com/astral-sh/uv)
 - pnpm (recommended) or npm/yarn
 
 ## Setup
@@ -18,6 +19,14 @@ pnpm install
 
 ### Install Python dependencies
 
+**Using uv (recommended):**
+```bash
+uv sync
+```
+
+This will create a virtual environment (`.venv`) and install all Python dependencies from `pyproject.toml`.
+
+**Alternative (using pip):**
 ```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
@@ -64,7 +73,7 @@ This starts a static file server on `http://localhost:4444` with CORS enabled.
 
 1. Build the widgets: `pnpm run build`
 2. Start the static file server: `pnpm run serve` (in one terminal)
-3. Start the MCP server: `uvicorn server:app --port 8000` (in another terminal)
+3. Start the MCP server: `uv run uvicorn server:app --port 8000` (in another terminal)
 
 ### Production
 

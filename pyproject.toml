@@ -1,0 +1,19 @@
+[project]
+name = "14ers-mcp-openai"
+version = "1.0.0"
+description = "Colorado 14ers MCP server with OpenAI Apps SDK widgets"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115.0",
+    "mcp[fastapi]>=0.1.0",
+    "uvicorn>=0.30.0",
+    "httpx>=0.28.0",
+    "psycopg2-binary>=2.9.0",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+

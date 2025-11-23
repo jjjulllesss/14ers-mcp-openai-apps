@@ -1248,6 +1248,9 @@ mcp._mcp_server.request_handlers[types.ReadResourceRequest] = _handle_read_resou
 # Create the MCP app
 # Note: Static assets (JS/CSS) are served from Supabase Storage in production
 # or from a separate server (pnpm run serve) for local development
+# MCP transport: streamable-http (for deployment platform detection)
+# The following line is for deployment platform transport detection:
+# mcp.run(transport="streamable-http")  # This server uses streamable_http_app() instead
 app = mcp.streamable_http_app()
 
 
