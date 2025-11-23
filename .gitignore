@@ -1,8 +1,11 @@
 node_modules/
 dist/
-assets/*.js
-assets/*.css
-assets/*.html
+# Ignore built/hashed assets (files with hash numbers like mountains-9252.js)
+assets/*-[0-9]*.js
+assets/*-[0-9]*.css
+assets/*-[0-9]*.html
+# Keep all HTML files (both template and hashed versions) and .gitkeep
+!assets/*.html
 !assets/.gitkeep
 .env
 .env.local
