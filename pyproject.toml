@@ -17,3 +17,8 @@ dependencies = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# Configure hatchling for single-file application
+[tool.hatch.build.targets.wheel]
+# Point to the package directory that matches the project name
+packages = ["14ers_mcp_openai"]
+
