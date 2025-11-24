@@ -35,4 +35,5 @@ DEV_GUIDE.md
 config.json
 dev.mjs
 ngrok.yml.example
+upload-to-supabase.mjs
 

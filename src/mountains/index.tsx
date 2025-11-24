@@ -26,14 +26,20 @@ interface ToolOutput {
   mountains: Mountain[];
 }
 
-function waitForToolOutput(maxAttempts = 50, interval = 100): Promise<ToolOutput> {
+function waitForToolOutput(maxAttempts = 40, interval = 250): Promise<ToolOutput> {
   return new Promise((resolve, reject) => {
+    // First, check immediately (data might already be available)
+    if ((window as any).openai?.toolOutput) {
+      resolve((window as any).openai.toolOutput);
+      return;
+    }
+
     let attempts = 0;
 
     const checkForData = () => {
       attempts++;
 
-      if ((window as any).openai && (window as any).openai.toolOutput) {
+      if ((window as any).openai?.toolOutput) {
         resolve((window as any).openai.toolOutput);
         return;
       }
@@ -46,7 +52,8 @@ function waitForToolOutput(maxAttempts = 50, interval = 100): Promise<ToolOutput
       setTimeout(checkForData, interval);
     };
 
-    checkForData();
+    // Start polling after initial check
+    setTimeout(checkForData, interval);
   });
 }
 

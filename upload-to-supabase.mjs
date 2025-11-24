@@ -76,7 +76,7 @@ async function uploadFile(file, accessToken) {
         "Authorization": `Bearer ${accessToken}`,
         "Content-Type": file.contentType,
         "x-upsert": "true", // Allow overwriting existing files
-        "Cache-Control": "public, max-age=31536000", // Cache for 1 year
+        "Cache-Control": "public, max-age=3600", // Cache for 1 hour (3600 seconds)
       },
       body: fileContent,
     });
