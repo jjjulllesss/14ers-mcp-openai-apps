@@ -12,7 +12,7 @@ interface Mountain {
   rank: number | null;
   elevation: number;
   elevation_ft: string;
-  range: string | null;
+  mountain_range: string | null;
   county: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -98,10 +98,12 @@ function App() {
         zoomControl: true,
       });
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 19,
-      }).addTo(mapRef.current);
+      const USGS_USTopo = L.tileLayer('https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 20,
+        attribution: 'Tiles courtesy of the <a href="https://usgs.gov/">U.S. Geological Survey</a>'
+      });
+      
+      USGS_USTopo.addTo(mapRef.current);
 
       // Fit map to show all mountains
       if (bounds.isValid()) {
@@ -132,20 +134,21 @@ function App() {
           className: "custom-marker",
           html: `<div style="
             background: ${isSelected ? "#ea580c" : "#dc2626"};
-            width: 24px;
-            height: 24px;
+            width: ${isSelected ? "30px" : "24px"};
+            height: ${isSelected ? "30px" : "24px"};
             border-radius: 50%;
-            border: 3px solid white;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            border: ${isSelected ? "4px solid #fb923c" : "3px solid white"};
+            box-shadow: ${isSelected ? "0 3px 8px rgba(234, 88, 12, 0.4)" : "0 2px 4px rgba(0,0,0,0.3)"};
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 12px;
+            font-size: ${isSelected ? "14px" : "12px"};
             color: white;
             font-weight: bold;
+            transition: all 0.2s ease;
           ">${mountain.rank || ""}</div>`,
-          iconSize: [24, 24],
-          iconAnchor: [12, 12],
+          iconSize: isSelected ? [30, 30] : [24, 24],
+          iconAnchor: isSelected ? [15, 15] : [12, 12],
         });
 
         const marker = L.marker([mountain.latitude, mountain.longitude], { icon })
@@ -154,7 +157,7 @@ function App() {
             `<div style="text-align: center;">
               <strong>${mountain.name}</strong><br/>
               ${mountain.elevation_ft || `${mountain.elevation}ft`}<br/>
-              ${mountain.range ? `Range: ${mountain.range}` : ""}
+              ${mountain.mountain_range ? `Range: ${mountain.mountain_range}` : ""}
             </div>`
           )
           .on("click", () => {
@@ -198,20 +201,21 @@ function App() {
         className: "custom-marker",
         html: `<div style="
           background: ${isSelected ? "#ea580c" : "#dc2626"};
-          width: 24px;
-          height: 24px;
+          width: ${isSelected ? "30px" : "24px"};
+          height: ${isSelected ? "30px" : "24px"};
           border-radius: 50%;
-          border: 3px solid white;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+          border: ${isSelected ? "4px solid #fb923c" : "3px solid white"};
+          box-shadow: ${isSelected ? "0 3px 8px rgba(234, 88, 12, 0.4)" : "0 2px 4px rgba(0,0,0,0.3)"};
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 12px;
+          font-size: ${isSelected ? "14px" : "12px"};
           color: white;
           font-weight: bold;
+          transition: all 0.2s ease;
         ">${mountain.rank || ""}</div>`,
-        iconSize: [24, 24],
-        iconAnchor: [12, 12],
+        iconSize: isSelected ? [30, 30] : [24, 24],
+        iconAnchor: isSelected ? [15, 15] : [12, 12],
       });
 
       marker.setIcon(icon);
@@ -288,6 +292,7 @@ function App() {
             <div className="bg-white rounded-full border border-black/10 shadow-sm hover:bg-gray-100 transition-colors w-10 h-10 flex items-center justify-center">
               <Button
                 variant="ghost"
+                color="secondary"
                 className="!bg-transparent !text-black hover:!bg-transparent !p-0 !rounded-full !w-full !h-full flex items-center justify-center"
                 onClick={() => {
                   setSelectedMountain(null);
@@ -310,7 +315,7 @@ function App() {
         {/* Results Panel */}
         <div className="w-full sm:w-80 border-t sm:border-t-0 sm:border-l border-black/5 bg-white overflow-y-auto">
           <div className="p-4 space-y-2">
-            {mountains.map((mountain, index) => (
+            {mountains.map((mountain) => (
               <div
                 key={mountain.id}
                 ref={selectedMountain?.id === mountain.id ? selectedMountainRef : null}
@@ -327,8 +332,24 @@ function App() {
                       );
                     }
                   } else {
-                    // First click - close all popups and select new mountain, no zoom
+                    // First click - close all popups and select new mountain
                     markersRef.current.forEach((marker) => marker.closePopup());
+                    
+                    // Check if the new mountain is visible in current viewport
+                    if (mapRef.current && mountain.latitude && mountain.longitude) {
+                      const bounds = mapRef.current.getBounds();
+                      const isVisible = bounds.contains([mountain.latitude, mountain.longitude]);
+                      
+                      // If not visible, reset zoom to show all mountains
+                      if (!isVisible && boundsRef.current && boundsRef.current.isValid()) {
+                        mapRef.current.fitBounds(boundsRef.current, {
+                          padding: [20, 20],
+                          animate: true,
+                          duration: 0.5,
+                        });
+                      }
+                    }
+                    
                     setSelectedMountain(mountain);
                   }
                 }}

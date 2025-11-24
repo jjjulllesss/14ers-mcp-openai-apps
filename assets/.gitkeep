@@ -1,3 +1,0 @@
-# This file ensures the assets directory is tracked in git
-# Built files (*.js, *.css, *.html) are ignored but the directory structure is preserved
-

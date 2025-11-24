@@ -8,8 +8,13 @@
     "build:supabase": "BASE_URL=https://kxvaohpqmhdtptwnaoyb.supabase.co/storage/v1/object/public/widgets tsx ./build-all.mts",
     "upload:supabase": "node upload-to-supabase.mjs",
     "deploy:supabase": "pnpm run build:supabase && pnpm run upload:supabase",
+    "deploy": "pnpm run deploy:supabase",
     "serve": "serve -s ./assets -p 4444 --cors",
     "dev": "vite --config vite.config.mts",
+    "dev:full": "node dev.mjs",
+    "dev:server": "uv run uvicorn server:app --port 8000",
+    "dev:ui": "pnpm run serve",
+    "dev:ngrok": "ngrok start --config ngrok.yml all",
     "tsc": "tsc -b",
     "tsc:app": "tsc -p tsconfig.app.json",
     "tsc:node": "tsc -p tsconfig.node.json"

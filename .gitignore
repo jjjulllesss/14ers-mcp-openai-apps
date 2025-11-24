@@ -4,8 +4,9 @@ dist/
 assets/*-[0-9]*.js
 assets/*-[0-9]*.css
 assets/*-[0-9]*.html
-# Keep all HTML files (both template and hashed versions) and .gitkeep
-!assets/*.html
+# Keep non-hashed HTML template files (mountains.html, mountain-info.html)
+!assets/mountains.html
+!assets/mountain-info.html
 !assets/.gitkeep
 .env
 .env.local
@@ -25,4 +26,13 @@ __pycache__/
 *.log
 .vscode/
 .idea/
+
+# ngrok config (may contain auth token)
+ngrok.yml
+
+# Dev automation files (local development only)
+DEV_GUIDE.md
+config.json
+dev.mjs
+ngrok.yml.example
 

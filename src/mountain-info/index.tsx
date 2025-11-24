@@ -9,7 +9,7 @@ interface Mountain {
   rank: number | null;
   elevation: number;
   elevation_ft: string;
-  range: string | null;
+  mountain_range: string | null;
   county: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -90,7 +90,7 @@ function App() {
     <div className="antialiased w-full text-black border border-black/10 rounded-2xl sm:rounded-3xl overflow-hidden bg-white">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-0">
         {/* Image Section */}
-        <div className="relative aspect-square sm:aspect-auto sm:h-full min-h-[300px] bg-gradient-to-br from-purple-500 to-indigo-600">
+        <div className="relative aspect-square sm:aspect-auto sm:h-full min-h-[300px] bg-gradient-to-br from-orange-500 to-red-600">
           {mountain.image_url ? (
             <img
               src={mountain.image_url}
@@ -134,7 +134,7 @@ function App() {
           {/* Stats Grid */}
           <div className="grid grid-cols-2 gap-4 mt-auto">
             <div className="flex flex-col gap-2">
-              <div className="text-3xl font-bold text-purple-600">
+              <div className="text-3xl font-bold text-orange-600">
                 {mountain.elevation_ft || `${mountain.elevation}ft`}
               </div>
               <div className="text-xs uppercase tracking-wider text-black/60 font-semibold">
@@ -142,7 +142,7 @@ function App() {
               </div>
             </div>
             <div className="flex flex-col gap-2">
-              <div className="text-3xl font-bold text-indigo-600">
+              <div className="text-3xl font-bold text-red-600">
                 {mountain.rank !== null && mountain.rank !== undefined
                   ? `#${mountain.rank}`
                   : "Unranked"}
@@ -153,7 +153,7 @@ function App() {
             </div>
             <div className="flex flex-col gap-2">
               <div
-                className="text-3xl font-bold text-purple-600 cursor-pointer hover:text-purple-700 transition-colors"
+                className="text-3xl font-bold text-orange-600 cursor-pointer hover:text-orange-700 transition-colors"
                 onClick={() => {
                   if (mountain?.name && window.openai?.sendFollowUpMessage) {
                     window.openai.sendFollowUpMessage({

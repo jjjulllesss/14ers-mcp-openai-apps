@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Awaitable, Callable, Dict, List, Tuple, Optional, Any
+from typing import Awaitable, Callable, Dict, List, Tuple, Optional, Any, Literal
 
 import mcp.types as types
 from mcp.server.fastmcp import FastMCP
@@ -149,7 +149,7 @@ def _execute_query(query: str, params: Optional[List[Any]] = None) -> List[Tuple
 
 
 # Constants for mountains query
-_MOUNTAINS_SELECT_FIELDS = "mountain_id, mountain_name, rank, elevation, mountain_range, county, latitude, longitude, nearby_towns, image_filename, mountain_url"
+_MOUNTAINS_SELECT_FIELDS = "mountain_id, mountain_name, rank, elevation, mountain_range, county, latitude, longitude, nearby_towns, image_filename, mountain_url, mountain_description"
 _MOUNTAINS_IMAGE_BASE_URL = "https://kxvaohpqmhdtptwnaoyb.supabase.co/storage/v1/object/public/mountains/"
 _MOUNTAINS_VALID_ORDER_BY = {"elevation", "rank"}
 _MOUNTAINS_VALID_ORDER_DIRECTION = {"ASC", "DESC"}
@@ -161,7 +161,7 @@ _MOUNTAINS_RANK_FILTERS = {
 }
 
 # Constants for routes query
-_ROUTES_SELECT_FIELDS = "mountain_name, route_name, route_difficulty, roundtrip_distance, elevation_gain, \"range\", snow, snow_difficulty, risk_factor_exposure, risk_factor_rockfall, risk_factor_route_finding, risk_factor_commitment, route_url, standard"
+_ROUTES_SELECT_FIELDS = "mountain_name, route_name, route_difficulty, roundtrip_distance, elevation_gain, mountain_range, snow, snow_difficulty, risk_factor_exposure, risk_factor_rockfall, risk_factor_route_finding, risk_factor_commitment, route_url, standard"
 _ROUTES_VALID_ORDER_BY = {"roundtrip_distance", "elevation_gain", "route_difficulty", "mountain_name"}
 _ROUTES_VALID_ORDER_DIRECTION = {"ASC", "DESC"}
 _ROUTES_MAX_LIMIT = 1000
@@ -182,7 +182,7 @@ class MountainsInput(BaseModel):
     max_elevation: Optional[int] = None
     rank_filter: Optional[str] = None
     name_search: Optional[str] = None
-    mountain_range: Optional[str] = None
+    mountain_range: Optional[Literal["Elk", "Front", "Mosquito", "San Juan", "Sangre de Cristo", "Sawatch", "Tenmile"]] = None
     county: Optional[str] = None
     nearby_towns: Optional[str] = None
     order_by: Optional[str] = Field(default="elevation")
@@ -212,7 +212,7 @@ class RoutesInput(BaseModel):
     mountain_name: Optional[str] = None
     route_name: Optional[str] = None
     route_difficulty: Optional[List[str]] = None
-    range: Optional[str] = None
+    mountain_range: Optional[Literal["Elk", "Front", "Mosquito", "San Juan", "Sangre de Cristo", "Sawatch", "Tenmile"]] = None
     snow: Optional[bool] = None
     standard: Optional[bool] = None
     min_distance: Optional[float] = None
@@ -257,12 +257,12 @@ def _mountains_add_filter(query: str, params: List, condition: str, value: Any, 
     
     if use_like:
         return query + f" AND {condition} ILIKE %s", params + [f"%{value}%"]
-    return query + f" AND {condition} %s", params + [value]
+    return query + f" AND {condition} = %s", params + [value]
 
 
 def _mountains_format_row(row: Tuple) -> str:
     """Format a single mountain row into a readable string."""
-    mountain_id, mountain_name, rank, elevation, mountain_range_val, county_val, latitude, longitude, nearby_towns_val, image_filename, mountain_url = row
+    mountain_id, mountain_name, rank, elevation, mountain_range_val, county_val, latitude, longitude, nearby_towns_val, image_filename, mountain_url, mountain_description = row
     
     # Build fields dictionary with all available data
     fields = {
@@ -274,6 +274,7 @@ def _mountains_format_row(row: Tuple) -> str:
         "County": county_val,
         "Location": f"{latitude}, {longitude}" if latitude and longitude else None,
         "Nearby Towns": nearby_towns_val,
+        "Description": mountain_description,
     }
     
     # Filter out None values and join
@@ -282,7 +283,7 @@ def _mountains_format_row(row: Tuple) -> str:
 
 def _mountains_row_to_dict(row: Tuple) -> Dict[str, Any]:
     """Convert a mountain row to a dictionary for structured content."""
-    mountain_id, mountain_name, rank, elevation, mountain_range_val, county_val, latitude, longitude, nearby_towns_val, image_filename, mountain_url = row
+    mountain_id, mountain_name, rank, elevation, mountain_range_val, county_val, latitude, longitude, nearby_towns_val, image_filename, mountain_url, mountain_description = row
     
     # Construct image URL if filename exists
     image_url = None
@@ -295,7 +296,7 @@ def _mountains_row_to_dict(row: Tuple) -> Dict[str, Any]:
         "rank": rank,
         "elevation": elevation,
         "elevation_ft": f"{elevation}ft",
-        "range": mountain_range_val,
+        "mountain_range": mountain_range_val,
         "county": county_val,
         "latitude": float(latitude) if latitude else None,
         "longitude": float(longitude) if longitude else None,
@@ -303,6 +304,33 @@ def _mountains_row_to_dict(row: Tuple) -> Dict[str, Any]:
         "image_url": image_url,
         "image_filename": image_filename,
         "mountain_url": mountain_url,
+    }
+
+
+def _mountain_info_row_to_dict(row: Tuple) -> Dict[str, Any]:
+    """Convert a mountain row to a dictionary for mountain_info tool, including description."""
+    mountain_id, mountain_name, rank, elevation, mountain_range_val, county_val, latitude, longitude, nearby_towns_val, image_filename, mountain_url, mountain_description = row
+    
+    # Construct image URL if filename exists
+    image_url = None
+    if image_filename:
+        image_url = f"{_MOUNTAINS_IMAGE_BASE_URL}{image_filename}"
+    
+    return {
+        "id": mountain_id,
+        "name": mountain_name,
+        "rank": rank,
+        "elevation": elevation,
+        "elevation_ft": f"{elevation}ft",
+        "mountain_range": mountain_range_val,
+        "county": county_val,
+        "latitude": float(latitude) if latitude else None,
+        "longitude": float(longitude) if longitude else None,
+        "nearby_towns": nearby_towns_val,
+        "image_url": image_url,
+        "image_filename": image_filename,
+        "mountain_url": mountain_url,
+        "description": mountain_description,
     }
 
 
@@ -352,7 +380,7 @@ def _routes_row_to_dict(row: Tuple) -> Dict[str, Any]:
         "route_difficulty": route_difficulty,
         "roundtrip_distance": float(roundtrip_distance) if roundtrip_distance else None,
         "elevation_gain": int(elevation_gain) if elevation_gain else None,
-        "range": range_val,
+        "mountain_range": range_val,
         "snow": bool(snow) if snow is not None else None,
         "risk_factor_exposure": risk_exposure,
         "risk_factor_rockfall": risk_rockfall,
@@ -428,7 +456,7 @@ async def _query_mountains(arguments: Dict) -> types.CallToolResult:
         ("elevation >=", arguments.get("min_elevation"), False),
         ("elevation <=", arguments.get("max_elevation"), False),
         ("mountain_name", arguments.get("name_search"), True),
-        ("mountain_range", arguments.get("mountain_range"), True),  # Uses ILIKE for flexible matching
+        ("mountain_range", arguments.get("mountain_range"), False),  # Uses exact matching for enum values
         ("county", arguments.get("county"), True),
         ("nearby_towns", arguments.get("nearby_towns"), True),
     ]
@@ -509,7 +537,7 @@ async def _query_routes(arguments: Dict) -> types.CallToolResult:
     filter_specs = [
         ("mountain_name", arguments.get("mountain_name"), True),
         ("route_name", arguments.get("route_name"), True),
-        ("\"range\"", arguments.get("range"), True),  # Uses ILIKE for flexible matching
+        ("mountain_range", arguments.get("mountain_range"), False),  # Uses exact matching for enum values
     ]
     
     for condition, value, use_like in filter_specs:
@@ -630,7 +658,7 @@ async def _get_mountain_info(arguments: Dict) -> types.CallToolResult:
         
         # Get mountain data
         mountain_row = mountain_results[0]
-        mountain_data = _mountains_row_to_dict(mountain_row)
+        mountain_data = _mountain_info_row_to_dict(mountain_row)
         mountain_name_for_routes = mountain_data["name"]
         
         # Query route count for this mountain
@@ -655,6 +683,12 @@ async def _get_mountain_info(arguments: Dict) -> types.CallToolResult:
             "mountain": mountain_data,
             "route_count": route_count,
         }
+        
+        # Add formatting instructions
+        # Note: mountain_url is already in mountain_data, and description should be included if present
+        formatting_instructions = "Present the mountain information clearly. Include the description of the peak if provided in the mountain data. Add the link for more information if mountain_url is available. After presenting the information, propose to see the routes or check the weather."
+        
+        widget_data["formatting_instructions"] = formatting_instructions
         
         # Get the mountain info widget
         mountain_info_widget = WIDGETS_BY_ID.get("mountain-info")
@@ -947,7 +981,8 @@ async def _list_tools() -> List[types.Tool]:
                     },
                     "mountain_range": {
                         "type": "string",
-                        "description": "Mountain range filter. Case-insensitive partial matching. IMPORTANT: Omit 'Range' (e.g., use 'Front' not 'Front Range'). Examples: 'Front' matches 'Front Range', 'Sawatch' matches 'Sawatch Range'.",
+                        "enum": ["Elk", "Front", "Mosquito", "San Juan", "Sangre de Cristo", "Sawatch", "Tenmile"],
+                        "description": "Mountain range filter. Must be one of the valid range values: Elk, Front, Mosquito, San Juan, Sangre de Cristo, Sawatch, or Tenmile.",
                     },
                     "county": {
                         "type": "string",
@@ -1006,9 +1041,10 @@ async def _list_tools() -> List[types.Tool]:
                         },
                         "description": "Filter routes by difficulty class(es). Can select multiple values. Omit to include all difficulty classes.",
                     },
-                    "range": {
+                    "mountain_range": {
                         "type": "string",
-                        "description": "Mountain range filter. Case-insensitive partial matching. IMPORTANT: Omit 'Range' (e.g., use 'Front' not 'Front Range'). Examples: 'Front' matches 'Front Range', 'Sawatch' matches 'Sawatch Range'.",
+                        "enum": ["Elk", "Front", "Mosquito", "San Juan", "Sangre de Cristo", "Sawatch", "Tenmile"],
+                        "description": "Mountain range filter. Must be one of the valid range values: Elk, Front, Mosquito, San Juan, Sangre de Cristo, Sawatch, or Tenmile.",
                     },
                     "snow": {
                         "type": "boolean",
