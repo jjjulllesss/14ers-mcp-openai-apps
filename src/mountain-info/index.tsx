@@ -164,7 +164,7 @@ function App() {
                 onClick={() => {
                   if (mountain?.name && window.openai?.sendFollowUpMessage) {
                     window.openai.sendFollowUpMessage({
-                      prompt: `Get more details about the routes for ${mountain.name}.`,
+                      prompt: `Use the get_mountain_routes tool to get more details about the routes for ${mountain.name}.`,
                     });
                   }
                 }}
@@ -183,7 +183,7 @@ function App() {
                 onClick={() => {
                   if (mountain?.name && window.openai?.sendFollowUpMessage) {
                     window.openai.sendFollowUpMessage({
-                      prompt: `Get the weather for ${mountain.name}`,
+                      prompt: `Use the get_mountain_weather tool to get the weather for ${mountain.name}`,
                     });
                   }
                 }}

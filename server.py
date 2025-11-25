@@ -207,7 +207,7 @@ class MountainsInput(BaseModel):
 
 
 class RoutesInput(BaseModel):
-    """Schema for get_routes tool."""
+    """Schema for get_mountain_routes tool."""
     limit: Optional[int] = Field(default=10, ge=1, le=1000)
     mountain_name: Optional[str] = None
     route_name: Optional[str] = None
@@ -246,7 +246,7 @@ class MountainInfoInput(BaseModel):
 
 
 class WeatherInput(BaseModel):
-    """Schema for get_weather tool."""
+    """Schema for get_mountain_weather tool."""
     mountain_name: str = Field(..., description="The name of the mountain to get weather for")
 
 
@@ -520,7 +520,7 @@ async def _query_mountains(arguments: Dict) -> types.CallToolResult:
         )
 
 
-async def _query_routes(arguments: Dict) -> types.CallToolResult:
+async def _query_mountain_routes(arguments: Dict) -> types.CallToolResult:
     """Query the routes table with optional filters and sorting."""
     
     # Extract arguments (already validated by Pydantic with defaults applied)
@@ -615,7 +615,7 @@ async def _query_routes(arguments: Dict) -> types.CallToolResult:
             # Add presentation format instructions to structured content
             structured_content = {"routes": routes_data}
             if len(results) > 1:
-                structured_content["formatting_instructions"] = "Use a table when presenting multiple routes. Provide personalized recommendations based on user preferences (experience level, distance, difficulty). After showing routes, suggest checking weather with get_weather if not already done."
+                structured_content["formatting_instructions"] = "Use a table when presenting multiple routes. Provide personalized recommendations based on user preferences (experience level, distance, difficulty). After showing routes, suggest checking weather with get_mountain_weather if not already done."
             
             return types.CallToolResult(
                 content=[types.TextContent(type="text", text=result_text)],
@@ -686,7 +686,7 @@ async def _get_mountain_info(arguments: Dict) -> types.CallToolResult:
         
         # Add formatting instructions
         # Note: mountain_url is already in mountain_data, and description should be included if present
-        formatting_instructions = "Present the mountain information clearly. Include the description of the peak if provided in the mountain data. Add the link for more information if mountain_url is available. After presenting the information, propose to see the routes or check the weather."
+        formatting_instructions = "Present the mountain information clearly. Include the description of the peak if provided in the mountain data. Add the link for more information if mountain_url is available. Do not add any other media (images, videos, etc.) in the answer. Do not guess or make up route information - always use the get_mountain_routes tool to get actual route data. After presenting the information, propose to see the routes or check the weather."
         
         widget_data["formatting_instructions"] = formatting_instructions
         
@@ -709,7 +709,7 @@ async def _get_mountain_info(arguments: Dict) -> types.CallToolResult:
         )
 
 
-async def _get_weather(arguments: Dict) -> types.CallToolResult:
+async def _get_mountain_weather(arguments: Dict) -> types.CallToolResult:
     """Get weather information from the National Weather Service API using a mountain name."""
     
     # Arguments already validated by Pydantic (mountain_name is required)
@@ -930,17 +930,17 @@ async def _get_weather(arguments: Dict) -> types.CallToolResult:
 # Tool registry - maps tool names to their execution handlers and input models
 TOOL_HANDLERS: Dict[str, Callable[[Dict], Awaitable[types.CallToolResult]]] = {
     "get_mountains": _query_mountains,
-    "get_routes": _query_routes,
+    "get_mountain_routes": _query_mountain_routes,
     "get_mountain_info": _get_mountain_info,
-    "get_weather": _get_weather,
+    "get_mountain_weather": _get_mountain_weather,
 }
 
 # Pydantic models for each tool
 TOOL_INPUT_MODELS: Dict[str, type[BaseModel]] = {
     "get_mountains": MountainsInput,
-    "get_routes": RoutesInput,
+    "get_mountain_routes": RoutesInput,
     "get_mountain_info": MountainInfoInput,
-    "get_weather": WeatherInput,
+    "get_mountain_weather": WeatherInput,
 }
 
 
@@ -1013,7 +1013,7 @@ async def _list_tools() -> List[types.Tool]:
             },
         ),
         types.Tool(
-            name="get_routes",
+            name="get_mountain_routes",
             title="Get Routes",
             description="Get climbing routes for Colorado 14ers. Returns route details including difficulty, distance, elevation gain, risk factors, and snow/standard status. Use this when users ask about routes, trails, or route planning. Presentation format: use a table when presenting multiple routes, provide personalized recommendations based on user preferences (experience level, distance, difficulty). After showing routes, suggest checking weather if not already done.",
             inputSchema={
@@ -1112,7 +1112,7 @@ async def _list_tools() -> List[types.Tool]:
             },
         ),
         types.Tool(
-            name="get_weather",
+            name="get_mountain_weather",
             title="Get Weather",
             description="Get weather forecast for a specific Colorado 14er mountain. Returns current conditions and multi-day forecast with temperature, wind speed/direction, and detailed descriptions. The forecast includes multiple periods (typically day/night cycles). Presentation format: use a table for multi-day forecasts, emojis for weather conditions (☀️ sunny, ⛅ partly sunny, ☁️ cloudy, 💨 windy, 🌫️ foggy, 🌧️ rain, ❄️ snow, ⛈️ storms), and provide advice on the best day to go based on weather conditions.",
             inputSchema={
