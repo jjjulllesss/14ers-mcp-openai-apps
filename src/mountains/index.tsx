@@ -7,7 +7,6 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 interface Mountain {
-  id: number;
   name: string;
   rank: number | null;
   elevation: number;
@@ -18,7 +17,6 @@ interface Mountain {
   longitude: number | null;
   nearby_towns: string | null;
   image_url: string | null;
-  image_filename: string | null;
   mountain_url: string | null;
 }
 
@@ -62,7 +60,7 @@ function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [selectedMountain, setSelectedMountain] = useState<Mountain | null>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const markersRef = useRef<Map<number, L.Marker>>(new Map());
+  const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const boundsRef = useRef<L.LatLngBounds | null>(null);
   const selectedMountainRef = useRef<HTMLDivElement | null>(null);
@@ -135,7 +133,7 @@ function App() {
     // Add markers for all mountains
     mountains.forEach((mountain) => {
       if (mountain.latitude && mountain.longitude) {
-        const isSelected = selectedMountain?.id === mountain.id;
+        const isSelected = selectedMountain?.name === mountain.name;
         
         const icon = L.divIcon({
           className: "custom-marker",
@@ -181,7 +179,7 @@ function App() {
           marker.setZIndexOffset(0);
         }
 
-        markersRef.current.set(mountain.id, marker);
+        markersRef.current.set(mountain.name, marker);
       }
     });
 
@@ -199,10 +197,10 @@ function App() {
     if (!mapRef.current || markersRef.current.size === 0) return;
 
     mountains.forEach((mountain) => {
-      const marker = markersRef.current.get(mountain.id);
+      const marker = markersRef.current.get(mountain.name);
       if (!marker) return;
 
-      const isSelected = selectedMountain?.id === mountain.id;
+      const isSelected = selectedMountain?.name === mountain.name;
       
       const icon = L.divIcon({
         className: "custom-marker",
@@ -324,12 +322,12 @@ function App() {
           <div className="p-4 space-y-2">
             {mountains.map((mountain) => (
               <div
-                key={mountain.id}
-                ref={selectedMountain?.id === mountain.id ? selectedMountainRef : null}
+                key={mountain.name}
+                ref={selectedMountain?.name === mountain.name ? selectedMountainRef : null}
                 onClick={() => {
                   // First click: just show the marker, no zoom
                   // Second click (if already selected): zoom with lower zoom level
-                  if (selectedMountain?.id === mountain.id) {
+                  if (selectedMountain?.name === mountain.name) {
                     // Second click - zoom but less than before
                     if (mountain.latitude && mountain.longitude) {
                       mapRef.current?.setView(
@@ -361,7 +359,7 @@ function App() {
                   }
                 }}
                 className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                  selectedMountain?.id === mountain.id
+                  selectedMountain?.name === mountain.name
                     ? "bg-orange-50 border-2 border-orange-500"
                     : "hover:bg-black/5 border-2 border-transparent"
                 }`}

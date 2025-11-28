@@ -4,7 +4,6 @@ import { ShimmerText } from "@openai/apps-sdk-ui/components/ShimmerText";
 import { Button } from "@openai/apps-sdk-ui/components/Button";
 
 interface Mountain {
-  id: number;
   name: string;
   rank: number | null;
   elevation: number;
@@ -15,7 +14,6 @@ interface Mountain {
   longitude: number | null;
   nearby_towns: string | null;
   image_url: string | null;
-  image_filename: string | null;
   mountain_url: string | null;
 }
 
@@ -164,7 +162,7 @@ function App() {
                 onClick={() => {
                   if (mountain?.name && window.openai?.sendFollowUpMessage) {
                     window.openai.sendFollowUpMessage({
-                      prompt: `Use the get_mountain_routes tool to get more details about the routes for ${mountain.name}.`,
+                      prompt: ` Show me the routes for ${mountain.name}. Use the get_mountain_routes tool.`,
                     });
                   }
                 }}
@@ -183,7 +181,7 @@ function App() {
                 onClick={() => {
                   if (mountain?.name && window.openai?.sendFollowUpMessage) {
                     window.openai.sendFollowUpMessage({
-                      prompt: `Use the get_mountain_weather tool to get the weather for ${mountain.name}`,
+                      prompt: `Get the current weather and the forecast for the next days for ${mountain.name}. Recommend the best day to try the ascent based on weather conditions. Use the get_mountain_weather tool.`,
                     });
                   }
                 }}

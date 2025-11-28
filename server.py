@@ -149,7 +149,7 @@ def _execute_query(query: str, params: Optional[List[Any]] = None) -> List[Tuple
 
 
 # Constants for mountains query
-_MOUNTAINS_SELECT_FIELDS = "mountain_id, mountain_name, rank, elevation, mountain_range, county, latitude, longitude, nearby_towns, image_filename, mountain_url, mountain_description"
+_MOUNTAINS_SELECT_FIELDS = "mountain_name, rank, elevation, mountain_range, county, latitude, longitude, nearby_towns, image_filename, mountain_url, mountain_description"
 _MOUNTAINS_IMAGE_BASE_URL = "https://kxvaohpqmhdtptwnaoyb.supabase.co/storage/v1/object/public/mountains/"
 _MOUNTAINS_VALID_ORDER_BY = {"elevation", "rank"}
 _MOUNTAINS_VALID_ORDER_DIRECTION = {"ASC", "DESC"}
@@ -262,11 +262,10 @@ def _mountains_add_filter(query: str, params: List, condition: str, value: Any, 
 
 def _mountains_format_row(row: Tuple) -> str:
     """Format a single mountain row into a readable string."""
-    mountain_id, mountain_name, rank, elevation, mountain_range_val, county_val, latitude, longitude, nearby_towns_val, image_filename, mountain_url, mountain_description = row
+    mountain_name, rank, elevation, mountain_range_val, county_val, latitude, longitude, nearby_towns_val, image_filename, mountain_url, mountain_description = row
     
     # Build fields dictionary with all available data
     fields = {
-        "ID": mountain_id,
         "Name": mountain_name,
         "Elevation": f"{elevation}ft",
         "Rank": rank if rank is not None else None,
@@ -283,7 +282,7 @@ def _mountains_format_row(row: Tuple) -> str:
 
 def _mountains_row_to_dict(row: Tuple) -> Dict[str, Any]:
     """Convert a mountain row to a dictionary for structured content."""
-    mountain_id, mountain_name, rank, elevation, mountain_range_val, county_val, latitude, longitude, nearby_towns_val, image_filename, mountain_url, mountain_description = row
+    mountain_name, rank, elevation, mountain_range_val, county_val, latitude, longitude, nearby_towns_val, image_filename, mountain_url, mountain_description = row
     
     # Construct image URL if filename exists
     image_url = None
@@ -291,7 +290,6 @@ def _mountains_row_to_dict(row: Tuple) -> Dict[str, Any]:
         image_url = f"{_MOUNTAINS_IMAGE_BASE_URL}{image_filename}"
     
     return {
-        "id": mountain_id,
         "name": mountain_name,
         "rank": rank,
         "elevation": elevation,
@@ -302,14 +300,13 @@ def _mountains_row_to_dict(row: Tuple) -> Dict[str, Any]:
         "longitude": float(longitude) if longitude else None,
         "nearby_towns": nearby_towns_val,
         "image_url": image_url,
-        "image_filename": image_filename,
         "mountain_url": mountain_url,
     }
 
 
 def _mountain_info_row_to_dict(row: Tuple) -> Dict[str, Any]:
     """Convert a mountain row to a dictionary for mountain_info tool, including description."""
-    mountain_id, mountain_name, rank, elevation, mountain_range_val, county_val, latitude, longitude, nearby_towns_val, image_filename, mountain_url, mountain_description = row
+    mountain_name, rank, elevation, mountain_range_val, county_val, latitude, longitude, nearby_towns_val, image_filename, mountain_url, mountain_description = row
     
     # Construct image URL if filename exists
     image_url = None
@@ -317,7 +314,6 @@ def _mountain_info_row_to_dict(row: Tuple) -> Dict[str, Any]:
         image_url = f"{_MOUNTAINS_IMAGE_BASE_URL}{image_filename}"
     
     return {
-        "id": mountain_id,
         "name": mountain_name,
         "rank": rank,
         "elevation": elevation,
@@ -328,7 +324,6 @@ def _mountain_info_row_to_dict(row: Tuple) -> Dict[str, Any]:
         "longitude": float(longitude) if longitude else None,
         "nearby_towns": nearby_towns_val,
         "image_url": image_url,
-        "image_filename": image_filename,
         "mountain_url": mountain_url,
         "description": mountain_description,
     }
