@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Awaitable, Callable, Dict, List, Tuple, Optional, Any, Literal
 
 import mcp.types as types
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 from dotenv import load_dotenv
 import os
 import psycopg2
@@ -74,10 +74,7 @@ WIDGETS_BY_URI: Dict[str, MountainsWidget] = {
 }
 
 
-mcp = FastMCP(
-    name="14ers-mcp",
-    stateless_http=True,
-)
+mcp = FastMCP(name="14ers-mcp")
 
 
 # Database connection management
@@ -941,7 +938,7 @@ TOOL_INPUT_MODELS: Dict[str, type[BaseModel]] = {
 
 
 
-@mcp._mcp_server.list_tools()
+# Define the list_tools function
 async def _list_tools() -> List[types.Tool]:
     return [
         types.Tool(
@@ -1188,7 +1185,7 @@ async def _call_tool_request(req: types.CallToolRequest) -> types.ServerResult:
         )
 
 
-@mcp._mcp_server.list_resources()
+# Define the list_resources function  
 async def _list_resources() -> List[types.Resource]:
     """List available UI resources."""
     return [
@@ -1211,7 +1208,7 @@ async def _list_resources() -> List[types.Resource]:
     ]
 
 
-@mcp._mcp_server.list_resource_templates()
+# Define the list_resource_templates function
 async def _list_resource_templates() -> List[types.ResourceTemplate]:
     """List available UI resource templates."""
     return [
@@ -1273,16 +1270,19 @@ async def _handle_read_resource(req: types.ReadResourceRequest) -> types.ServerR
     return types.ServerResult(types.ReadResourceResult(contents=contents))
 
 
-mcp._mcp_server.request_handlers[types.CallToolRequest] = _call_tool_request
-mcp._mcp_server.request_handlers[types.ReadResourceRequest] = _handle_read_resource
+# Register custom request handlers and list functions
+_server = mcp._mcp_server
+_server.request_handlers[types.CallToolRequest] = _call_tool_request
+_server.request_handlers[types.ReadResourceRequest] = _handle_read_resource
+_server.list_tools()(_list_tools)
+_server.list_resources()(_list_resources)
+_server.list_resource_templates()(_list_resource_templates)
 
 # Create the MCP app
 # Note: Static assets (JS/CSS) are served from Supabase Storage in production
 # or from a separate server (pnpm run serve) for local development
-# MCP transport: streamable-http (for deployment platform detection)
-# The following line is for deployment platform transport detection (grep pattern only):
-# mcp.run(transport="streamable-http")  # Detection marker - actual implementation uses streamable_http_app() below
-app = mcp.streamable_http_app()
+# MCP transport: streamable-http
+app = mcp.http_app()
 
 
 if __name__ == "__main__":
