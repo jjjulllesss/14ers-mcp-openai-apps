@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Awaitable, Callable, Dict, List, Tuple, Optional, Any, Literal
+import traceback
 
 import mcp.types as types
 from fastmcp import FastMCP
@@ -254,7 +255,14 @@ def _mountains_add_filter(query: str, params: List, condition: str, value: Any, 
     
     if use_like:
         return query + f" AND {condition} ILIKE %s", params + [f"%{value}%"]
-    return query + f" AND {condition} = %s", params + [value]
+    
+    # Check if condition already contains an operator (>=, <=, >, <, =)
+    if any(op in condition for op in [">=", "<=", ">", "<", "="]):
+        # Condition already has operator, just add the parameter placeholder
+        return query + f" AND {condition} %s", params + [value]
+    else:
+        # No operator in condition, use equality
+        return query + f" AND {condition} = %s", params + [value]
 
 
 def _mountains_format_row(row: Tuple) -> str:
@@ -718,6 +726,7 @@ async def _get_mountain_weather(arguments: Dict) -> types.CallToolResult:
         mountain_results = _execute_query(query, params)
         
         if not mountain_results:
+            print(f"Weather request failed: No mountain found matching '{mountain_name}'")
             return types.CallToolResult(
                 content=[types.TextContent(type="text", text=f"Error: No mountain found matching '{mountain_name}'. Please check the mountain name and try again.")],
                 isError=True,
@@ -733,6 +742,7 @@ async def _get_mountain_weather(arguments: Dict) -> types.CallToolResult:
         actual_mountain_name = mountain_data.get("name")
         
         if lat is None or lon is None:
+            print(f"Weather request failed: Mountain '{actual_mountain_name}' does not have GPS coordinates")
             return types.CallToolResult(
                 content=[types.TextContent(type="text", text=f"Error: Mountain '{actual_mountain_name}' does not have GPS coordinates in the database.")],
                 isError=True,
@@ -742,71 +752,136 @@ async def _get_mountain_weather(arguments: Dict) -> types.CallToolResult:
         try:
             lat = float(lat)
             lon = float(lon)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as e:
+            print(f"Weather request failed: Invalid coordinate format for mountain '{actual_mountain_name}': {e}")
             return types.CallToolResult(
                 content=[types.TextContent(type="text", text=f"Error: Invalid coordinates for mountain '{actual_mountain_name}'.")],
                 isError=True,
             )
         
         if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
+            print(f"Weather request failed: Coordinates out of valid range for mountain '{actual_mountain_name}': ({lat}, {lon})")
             return types.CallToolResult(
                 content=[types.TextContent(type="text", text=f"Error: Invalid coordinates for mountain '{actual_mountain_name}'.")],
                 isError=True,
             )
         
-        # First, get the grid endpoint
-        points_url = f"https://api.weather.gov/points/{lat},{lon}"
+        # Round coordinates to 4 decimal places to match NWS API requirements
+        # NWS API requires exactly 4 decimal places to avoid 302 redirects
+        lat_rounded = round(lat, 4)
+        lon_rounded = round(lon, 4)
         
-        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-            try:
-                points_response = await client.get(points_url, headers=NWS_HEADERS)
-                points_response.raise_for_status()
-                points_data = points_response.json()
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 404:
+        # First, get the grid endpoint
+        points_url = f"https://api.weather.gov/points/{lat_rounded},{lon_rounded}"
+        forecast_data = None
+        
+        print(f"Weather request started for mountain: {actual_mountain_name} at coordinates ({lat}, {lon}) -> rounded to ({lat_rounded}, {lon_rounded})")
+        
+        try:
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+                print(f"Making NWS points API request: {points_url}")
+                try:
+                    points_response = await client.get(points_url, headers=NWS_HEADERS)
+                    points_response.raise_for_status()
+                    print(f"NWS points API request successful: HTTP {points_response.status_code}")
+                    try:
+                        points_data = points_response.json()
+                    except (ValueError, KeyError) as e:
+                        print(f"Error parsing NWS points API JSON response: {e}")
+                        return types.CallToolResult(
+                            content=[types.TextContent(type="text", text=f"Error: Invalid JSON response from NWS API: {str(e)}")],
+                            isError=True,
+                        )
+                except httpx.HTTPStatusError as e:
+                    print(f"NWS points API request failed: HTTP {e.response.status_code}")
+                    if e.response.status_code == 404:
+                        return types.CallToolResult(
+                            content=[types.TextContent(type="text", text=f"Error: No weather data available for {actual_mountain_name} at coordinates ({lat_rounded}, {lon_rounded}). The location may be outside the NWS coverage area.")],
+                            isError=True,
+                        )
                     return types.CallToolResult(
-                        content=[types.TextContent(type="text", text=f"Error: No weather data available for {actual_mountain_name} at coordinates ({lat}, {lon}). The location may be outside the NWS coverage area.")],
+                        content=[types.TextContent(type="text", text=f"Error: Failed to get weather grid point: HTTP {e.response.status_code}")],
                         isError=True,
                     )
-                return types.CallToolResult(
-                    content=[types.TextContent(type="text", text=f"Error: Failed to get weather grid point: HTTP {e.response.status_code}")],
-                    isError=True,
-                )
-            except httpx.RequestError as e:
-                return types.CallToolResult(
-                    content=[types.TextContent(type="text", text=f"Error: Network error connecting to NWS API: {str(e)}")],
-                    isError=True,
-                )
-            
-            # Get the forecast URL from the points data
-            try:
-                forecast_url = points_data['properties']['forecast']
-            except KeyError:
-                return types.CallToolResult(
-                    content=[types.TextContent(type="text", text="Error: Invalid response from NWS API - forecast URL not found.")],
-                    isError=True,
-                )
-            
-            # Get the forecast data
-            try:
-                forecast_response = await client.get(forecast_url, headers=NWS_HEADERS)
-                forecast_response.raise_for_status()
-                forecast_data = forecast_response.json()
-            except httpx.HTTPStatusError as e:
-                return types.CallToolResult(
-                    content=[types.TextContent(type="text", text=f"Error: Failed to get weather forecast: HTTP {e.response.status_code}")],
-                    isError=True,
-                )
-            except httpx.RequestError as e:
-                return types.CallToolResult(
-                    content=[types.TextContent(type="text", text=f"Error: Network error getting forecast: {str(e)}")],
-                    isError=True,
-                )
+                except httpx.RequestError as e:
+                    print(f"Network error connecting to NWS points API: {e}")
+                    return types.CallToolResult(
+                        content=[types.TextContent(type="text", text=f"Error: Network error connecting to NWS API: {str(e)}")],
+                        isError=True,
+                    )
+                except Exception as e:
+                    print(f"Unexpected error getting weather grid point: {e}")
+                    return types.CallToolResult(
+                        content=[types.TextContent(type="text", text=f"Error: Unexpected error getting weather grid point: {str(e)}")],
+                        isError=True,
+                    )
+                
+                # Get the forecast URL from the points data
+                try:
+                    forecast_url = points_data['properties']['forecast']
+                    print(f"Forecast URL extracted: {forecast_url}")
+                except KeyError:
+                    print("Error: Forecast URL not found in NWS points API response")
+                    return types.CallToolResult(
+                        content=[types.TextContent(type="text", text="Error: Invalid response from NWS API - forecast URL not found.")],
+                        isError=True,
+                    )
+                
+                # Get the forecast data
+                print(f"Making NWS forecast API request: {forecast_url}")
+                try:
+                    forecast_response = await client.get(forecast_url, headers=NWS_HEADERS)
+                    forecast_response.raise_for_status()
+                    print(f"NWS forecast API request successful: HTTP {forecast_response.status_code}")
+                    try:
+                        forecast_data = forecast_response.json()
+                        print(f"Weather data retrieved successfully for {actual_mountain_name}")
+                    except (ValueError, KeyError) as e:
+                        print(f"Error parsing NWS forecast API JSON response: {e}")
+                        return types.CallToolResult(
+                            content=[types.TextContent(type="text", text=f"Error: Invalid JSON response from forecast API: {str(e)}")],
+                            isError=True,
+                        )
+                except httpx.HTTPStatusError as e:
+                    print(f"NWS forecast API request failed: HTTP {e.response.status_code}")
+                    return types.CallToolResult(
+                        content=[types.TextContent(type="text", text=f"Error: Failed to get weather forecast: HTTP {e.response.status_code}")],
+                        isError=True,
+                    )
+                except httpx.RequestError as e:
+                    print(f"Network error connecting to NWS forecast API: {e}")
+                    return types.CallToolResult(
+                        content=[types.TextContent(type="text", text=f"Error: Network error getting forecast: {str(e)}")],
+                        isError=True,
+                    )
+                except Exception as e:
+                    print(f"Unexpected error getting forecast: {e}")
+                    return types.CallToolResult(
+                        content=[types.TextContent(type="text", text=f"Error: Unexpected error getting forecast: {str(e)}")],
+                        isError=True,
+                    )
+        except Exception as e:
+            # Catch any errors during client initialization or cleanup
+            print(f"Error during HTTP client initialization or cleanup: {e}")
+            return types.CallToolResult(
+                content=[types.TextContent(type="text", text=f"Error: Failed to initialize HTTP client or during cleanup: {str(e)}")],
+                isError=True,
+            )
+        
+        # Ensure forecast_data was successfully retrieved
+        if forecast_data is None:
+            print(f"Weather request failed: Forecast data not available for {actual_mountain_name}")
+            return types.CallToolResult(
+                content=[types.TextContent(type="text", text="Error: Forecast data not available.")],
+                isError=True,
+            )
         
         # Process the forecast data
         try:
             periods = forecast_data['properties']['periods']
+            print(f"Processing forecast data: {len(periods)} periods found for {actual_mountain_name}")
         except KeyError:
+            print(f"Error: Forecast periods not found in response for {actual_mountain_name}")
             return types.CallToolResult(
                 content=[types.TextContent(type="text", text="Error: Invalid forecast response - periods not found.")],
                 isError=True,
@@ -844,7 +919,9 @@ async def _get_mountain_weather(arguments: Dict) -> types.CallToolResult:
                 'wind_speed': current.get('windSpeed'),
                 'wind_direction': current.get('windDirection'),
                 'short_forecast': current.get('shortForecast'),
-                'detailed_forecast': current.get('detailedForecast')
+                'detailed_forecast': current.get('detailedForecast'),
+                'probabilityOfPrecipitation': current.get('probabilityOfPrecipitation'),
+                'icon': current.get('icon')
             }
         
         # Get forecast for next few days
@@ -856,7 +933,9 @@ async def _get_mountain_weather(arguments: Dict) -> types.CallToolResult:
                 'wind_speed': period.get('windSpeed'),
                 'wind_direction': period.get('windDirection'),
                 'short_forecast': period.get('shortForecast'),
-                'detailed_forecast': period.get('detailedForecast')
+                'detailed_forecast': period.get('detailedForecast'),
+                'probabilityOfPrecipitation': period.get('probabilityOfPrecipitation'),
+                'icon': period.get('icon')
             })
         
         # Format the result text
@@ -879,7 +958,10 @@ async def _get_mountain_weather(arguments: Dict) -> types.CallToolResult:
             if current.get('detailed_forecast'):
                 result_text += f"  {current['detailed_forecast']}\n"
             result_text += "\n"
-        
+            if current.get('probabilityOfPrecipitation'):
+                result_text += f"  Probability of Precipitation: {current['probabilityOfPrecipitation']}%\n"
+            if current.get('icon'):
+                result_text += f"  Icon: {current['icon']}\n"
         # Add forecast
         if weather_data['forecast']:
             result_text += "Forecast:\n"
@@ -898,7 +980,10 @@ async def _get_mountain_weather(arguments: Dict) -> types.CallToolResult:
                 if period.get('detailed_forecast'):
                     result_text += f"  {period['detailed_forecast']}\n"
                 result_text += "\n"
-        
+                if period.get('probabilityOfPrecipitation'):
+                    result_text += f"  Probability of Precipitation: {period['probabilityOfPrecipitation']}%\n"
+                if period.get('icon'):
+                    result_text += f"  Icon: {period['icon']}\n"
         # Add presentation format instructions to structured content
         structured_content = {
             "weather": weather_data,
@@ -912,7 +997,8 @@ async def _get_mountain_weather(arguments: Dict) -> types.CallToolResult:
         
     except Exception as e:
         error_msg = f"Failed to get weather: {e}"
-        print(error_msg)
+        print(f"Weather request error: {error_msg}")
+        print(f"Traceback: {traceback.format_exc()}")
         return types.CallToolResult(
             content=[types.TextContent(type="text", text=error_msg)],
             isError=True,
