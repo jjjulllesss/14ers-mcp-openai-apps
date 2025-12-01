@@ -59,6 +59,7 @@ function App() {
   const [mountains, setMountains] = useState<Mountain[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [selectedMountain, setSelectedMountain] = useState<Mountain | null>(null);
+  const [displayMode, setDisplayMode] = useState<"inline" | "fullscreen" | "pip">("pip");
   const mapRef = useRef<L.Map | null>(null);
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -247,10 +248,78 @@ function App() {
     }
   }, [selectedMountain, mountains]);
 
+  // Handle display mode changes - toggle between fullscreen and inline
+  const toggleDisplayMode = async () => {
+    const newMode = displayMode === "fullscreen" ? "inline" : "fullscreen";
+    try {
+      if (window.openai?.requestDisplayMode) {
+        await window.openai.requestDisplayMode({ mode: newMode });
+        setDisplayMode(newMode);
+        // Invalidate map size after mode change
+        setTimeout(() => {
+          mapRef.current?.invalidateSize();
+        }, 200);
+      }
+    } catch (error) {
+      console.error("Failed to change display mode:", error);
+    }
+  };
+
+  // Invalidate map size when display mode changes
+  useEffect(() => {
+    if (mapRef.current) {
+      // Use a small delay to ensure DOM has updated
+      setTimeout(() => {
+        mapRef.current?.invalidateSize();
+      }, 100);
+    }
+  }, [displayMode]);
+
+  // Listen for display mode changes from the host
+  useEffect(() => {
+    const checkDisplayMode = () => {
+      // The host may change the display mode, so we should check periodically
+      // or listen to events if available
+      if (mapRef.current) {
+        mapRef.current.invalidateSize();
+      }
+    };
+
+    // Check on mount and periodically
+    checkDisplayMode();
+    const interval = setInterval(checkDisplayMode, 1000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
   if (isLoading) {
     return (
-      <div className="antialiased w-full text-black border border-black/10 rounded-2xl sm:rounded-3xl overflow-hidden bg-white">
-        <div className="p-4">
+      <div 
+        className="antialiased w-full text-black border border-black/10 rounded-2xl sm:rounded-3xl overflow-hidden bg-white flex flex-col"
+        style={displayMode === "fullscreen" ? { height: "100vh" } : undefined}
+      >
+        {/* Header */}
+        <div className="flex flex-row items-center gap-4 px-4 py-3 border-b border-black/5 flex-shrink-0">
+          <div className="w-12 h-12 aspect-square rounded-xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center overflow-hidden">
+            <img 
+              src="https://kxvaohpqmhdtptwnaoyb.supabase.co/storage/v1/object/public/icons/14ersicon.png" 
+              alt="14ers Icon" 
+              className="w-full h-full object-cover"
+            />
+          </div>
+          <div>
+            <div className="text-base sm:text-lg font-medium">Colorado 14ers Map</div>
+            <div className="text-sm text-black/60">
+              <ShimmerText>Loading...</ShimmerText>
+            </div>
+          </div>
+        </div>
+
+        {/* Loading content area - matches map/results panel height */}
+        <div 
+          className="flex items-center justify-center"
+          style={displayMode === "fullscreen" ? { flex: 1 } : { height: "500px" }}
+        >
           <div className="text-center">
             <ShimmerText>Searching for mountains information...</ShimmerText>
           </div>
@@ -261,8 +330,30 @@ function App() {
 
   if (mountains.length === 0) {
     return (
-      <div className="antialiased w-full text-black border border-black/10 rounded-2xl sm:rounded-3xl overflow-hidden bg-white">
-        <div className="p-4">
+      <div 
+        className="antialiased w-full text-black border border-black/10 rounded-2xl sm:rounded-3xl overflow-hidden bg-white flex flex-col"
+        style={displayMode === "fullscreen" ? { height: "100vh" } : undefined}
+      >
+        {/* Header */}
+        <div className="flex flex-row items-center gap-4 px-4 py-3 border-b border-black/5 flex-shrink-0">
+          <div className="w-12 h-12 aspect-square rounded-xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center overflow-hidden">
+            <img 
+              src="https://kxvaohpqmhdtptwnaoyb.supabase.co/storage/v1/object/public/icons/14ersicon.png" 
+              alt="14ers Icon" 
+              className="w-full h-full object-cover"
+            />
+          </div>
+          <div>
+            <div className="text-base sm:text-lg font-medium">Colorado 14ers Map</div>
+            <div className="text-sm text-black/60">No mountains</div>
+          </div>
+        </div>
+
+        {/* Content area - matches map/results panel height */}
+        <div 
+          className="flex items-center justify-center"
+          style={displayMode === "fullscreen" ? { flex: 1 } : { height: "500px" }}
+        >
           <div className="text-center text-black/60">No mountains found with location data.</div>
         </div>
       </div>
@@ -270,31 +361,59 @@ function App() {
   }
 
   return (
-    <div className="antialiased w-full text-black border border-black/10 rounded-2xl sm:rounded-3xl overflow-hidden bg-white flex flex-col h-full">
+    <div 
+      className="antialiased w-full text-black border border-black/10 rounded-2xl sm:rounded-3xl overflow-hidden bg-white flex flex-col"
+      style={displayMode === "fullscreen" ? { height: "100vh" } : undefined}
+    >
       {/* Header */}
-      <div className="flex flex-row items-center gap-4 px-4 py-3 border-b border-black/5">
-        <div className="w-12 h-12 aspect-square rounded-xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center overflow-hidden">
+      <div className="flex flex-row items-center gap-2 sm:gap-4 px-2 sm:px-4 py-2 sm:py-3 border-b border-black/5 flex-shrink-0">
+        <div className="w-8 h-8 sm:w-12 sm:h-12 aspect-square rounded-xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center overflow-hidden flex-shrink-0">
           <img 
             src="https://kxvaohpqmhdtptwnaoyb.supabase.co/storage/v1/object/public/icons/14ersicon.png" 
             alt="14ers Icon" 
             className="w-full h-full object-cover"
           />
         </div>
-        <div>
-          <div className="text-base sm:text-lg font-medium">Colorado 14ers Map</div>
-          <div className="text-sm text-black/60">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm sm:text-base md:text-lg font-medium truncate">Colorado 14ers Map</div>
+          <div className="text-xs sm:text-sm text-black/60 truncate">
             {mountains.length} {mountains.length === 1 ? "mountain" : "mountains"}
           </div>
         </div>
       </div>
 
       {/* Map and Results Panel */}
-      <div className="flex flex-col sm:flex-row" style={{ height: "500px" }}>
+      <div className="flex flex-col sm:flex-row min-h-0" style={displayMode === "fullscreen" ? { flex: 1 } : { height: "500px" }}>
         {/* Map */}
-        <div className="flex-1 h-full w-full relative" ref={mapContainerRef} style={{ minHeight: "400px" }}>
-          {/* Reset Zoom Button - Floating */}
-          <div className="absolute top-4 right-4 z-[1000]">
-            <div className="bg-white rounded-full border border-black/10 shadow-sm hover:bg-gray-100 transition-colors w-10 h-10 flex items-center justify-center">
+        <div className="flex-1 h-full w-full relative min-h-0" ref={mapContainerRef} style={{ minHeight: displayMode === "fullscreen" ? "0" : "300px" }}>
+          {/* Control Buttons - Floating */}
+          <div className="absolute top-2 right-2 sm:top-4 sm:right-4 z-[1000] flex flex-col gap-2">
+            {/* Fullscreen Toggle Button */}
+            {window.openai?.requestDisplayMode && (
+              <div className="bg-white rounded-full border border-black/10 shadow-sm hover:bg-gray-100 transition-colors w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center">
+                <Button
+                  variant="ghost"
+                  color="secondary"
+                  className="!bg-transparent !text-black hover:!bg-transparent !p-0 !rounded-full !w-full !h-full flex items-center justify-center"
+                  onClick={toggleDisplayMode}
+                  title={displayMode === "fullscreen" ? "Exit Fullscreen" : "Switch to Fullscreen"}
+                >
+                  {displayMode === "fullscreen" ? (
+                    // Exit fullscreen icon (compress icon)
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+                    </svg>
+                  ) : (
+                    // Enter fullscreen icon (expand icon)
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                    </svg>
+                  )}
+                </Button>
+              </div>
+            )}
+            {/* Reset Zoom Button */}
+            <div className="bg-white rounded-full border border-black/10 shadow-sm hover:bg-gray-100 transition-colors w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center">
               <Button
                 variant="ghost"
                 color="secondary"
@@ -318,8 +437,8 @@ function App() {
         </div>
 
         {/* Results Panel */}
-        <div className="w-full sm:w-80 border-t sm:border-t-0 sm:border-l border-black/5 bg-white overflow-y-auto">
-          <div className="p-4 space-y-2">
+        <div className="w-full sm:w-80 border-t sm:border-t-0 sm:border-l border-black/5 bg-white overflow-y-auto max-h-[200px] sm:max-h-none">
+          <div className="p-2 sm:p-4 space-y-2">
             {mountains.map((mountain) => (
               <div
                 key={mountain.name}
@@ -358,27 +477,27 @@ function App() {
                     setSelectedMountain(mountain);
                   }
                 }}
-                className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                className={`p-2 sm:p-3 rounded-lg cursor-pointer transition-colors ${
                   selectedMountain?.name === mountain.name
                     ? "bg-orange-50 border-2 border-orange-500"
                     : "hover:bg-black/5 border-2 border-transparent"
                 }`}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 sm:gap-3">
                   {mountain.image_url ? (
                     <img
                       src={mountain.image_url}
                       alt={mountain.name}
-                      className="h-12 w-12 rounded-lg object-cover ring ring-black/5"
+                      className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg object-cover ring ring-black/5 flex-shrink-0"
                     />
                   ) : (
-                    <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center">
-                      <span className="text-white text-sm">⛰️</span>
+                    <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center flex-shrink-0">
+                      <span className="text-white text-xs sm:text-sm">⛰️</span>
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm truncate">{mountain.name}</div>
-                    <div className="flex items-center gap-2 text-xs text-black/70 mt-1">
+                    <div className="font-medium text-xs sm:text-sm truncate">{mountain.name}</div>
+                    <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-black/70 mt-0.5 sm:mt-1">
                       <span>⬆ {mountain.elevation_ft || `${mountain.elevation}ft`}</span>
                       {mountain.rank !== null && mountain.rank !== undefined && (
                         <span>• Rank #{mountain.rank}</span>

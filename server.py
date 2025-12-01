@@ -29,6 +29,10 @@ class MountainsWidget:
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 MIME_TYPE = "text/html+skybridge"
 
+# Ensure assets directory exists
+if not ASSETS_DIR.exists():
+    ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+
 
 @lru_cache(maxsize=None)
 def _load_widget_html(component_name: str) -> str:
@@ -42,7 +46,7 @@ def _load_widget_html(component_name: str) -> str:
 
     raise FileNotFoundError(
         f'Widget HTML for "{component_name}" not found in {ASSETS_DIR}. '
-        "Make sure the assets directory contains the mountains.html file."
+        f"Make sure the assets directory contains the {component_name}.html file."
     )
 
 
@@ -64,14 +68,36 @@ mountain_info_widget = MountainsWidget(
     html=_load_widget_html("mountain-info"),
 )
 
+routes_widget = MountainsWidget(
+    identifier="routes-list",
+    title="Routes List",
+    template_uri="ui://widget/routes.html",
+    invoking="Loading routes...",
+    invoked="Routes loaded",
+    html=_load_widget_html("routes"),
+)
+
+weather_widget = MountainsWidget(
+    identifier="weather-carousel",
+    title="Weather Forecast",
+    template_uri="ui://widget/weather.html",
+    invoking="Loading weather forecast...",
+    invoked="Weather forecast loaded",
+    html=_load_widget_html("weather"),
+)
+
 
 WIDGETS_BY_ID: Dict[str, MountainsWidget] = {
     widget.identifier: widget,
     mountain_info_widget.identifier: mountain_info_widget,
+    routes_widget.identifier: routes_widget,
+    weather_widget.identifier: weather_widget,
 }
 WIDGETS_BY_URI: Dict[str, MountainsWidget] = {
     widget.template_uri: widget,
     mountain_info_widget.template_uri: mountain_info_widget,
+    routes_widget.template_uri: routes_widget,
+    weather_widget.template_uri: weather_widget,
 }
 
 
@@ -370,6 +396,32 @@ def _routes_format_row(row: Tuple) -> str:
     return "\n".join(f"{k}: {v}" for k, v in fields.items() if v is not None)
 
 
+def _get_difficulty_level(route_difficulty: str) -> int:
+    """Extract numeric difficulty level from route difficulty string for sorting."""
+    if not route_difficulty:
+        return 999  # Put unknown difficulties at the end
+    
+    route_difficulty_lower = route_difficulty.lower()
+    
+    # Extract class number from strings like "Class 1", "Class 2", etc.
+    if "class 1" in route_difficulty_lower or "easy class 1" in route_difficulty_lower:
+        return 1
+    elif "class 2" in route_difficulty_lower:
+        if "difficult" in route_difficulty_lower:
+            return 2.5  # Difficult Class 2 is between 2 and 3
+        return 2
+    elif "class 3" in route_difficulty_lower:
+        if "easy" in route_difficulty_lower:
+            return 2.5  # Easy Class 3 is between 2 and 3
+        return 3
+    elif "class 4" in route_difficulty_lower:
+        return 4
+    elif "class 5" in route_difficulty_lower:
+        return 5
+    
+    return 999  # Unknown difficulty at the end
+
+
 def _routes_row_to_dict(row: Tuple) -> Dict[str, Any]:
     """Convert a route row to a dictionary for structured content."""
     mountain_name, route_name, route_difficulty, roundtrip_distance, elevation_gain, range_val, snow, snow_difficulty, risk_exposure, risk_rockfall, risk_route_finding, risk_commitment, route_url, standard = row
@@ -501,7 +553,7 @@ async def _query_mountains(arguments: Dict) -> types.CallToolResult:
             # Add presentation format instructions to structured content
             structured_content = {"mountains": mountains_data}
             if len(results) > 1:
-                structured_content["formatting_instructions"] = "Use a table when presenting multiple mountains to the user. After showing results, suggest: checking details for a specific mountain, finding routes, or checking weather conditions."
+                structured_content["formatting_instructions"] = "Keep your response brief. Do not repeat the mountain data (name, elevation, rank, etc.) as it's already displayed in the widget. Instead, focus on insights: highlight interesting patterns or notable mountains, suggest which mountains might be best for different skill levels, and recommend next steps. After showing results, suggest checking details for a specific mountain, finding routes, or checking weather for the summit."
             
             meta = _tool_invocation_meta(widget)
             
@@ -606,20 +658,44 @@ async def _query_mountain_routes(arguments: Dict) -> types.CallToolResult:
                 structuredContent={"routes": []},
             )
         else:
-            formatted_routes = [_routes_format_row(row) for row in results]
-            result_text = f"Found {len(results)} route(s):\n\n" + "\n\n".join(formatted_routes)
+            # Sort results: standard routes first, then by difficulty level
+            # Create list of (row, sort_key) tuples for sorting
+            def get_sort_key(row: Tuple) -> Tuple[bool, float, str]:
+                """Return sort key: (is_standard, difficulty_level, route_name) for stable sorting."""
+                # Extract standard flag (False sorts before True, so we negate to put True first)
+                standard = row[13]  # standard is the 14th field (0-indexed: 13)
+                is_standard = bool(standard) if standard is not None else False
+                
+                # Extract difficulty level
+                route_difficulty = row[2]  # route_difficulty is the 3rd field (0-indexed: 2)
+                difficulty_level = _get_difficulty_level(route_difficulty) if route_difficulty else 999
+                
+                # Use route_name for stable sorting
+                route_name = row[1]  # route_name is the 2nd field (0-indexed: 1)
+                
+                # Return tuple: (not is_standard so True comes first, difficulty_level, route_name)
+                return (not is_standard, difficulty_level, route_name or "")
+            
+            # Sort results
+            sorted_results = sorted(results, key=get_sort_key)
+            
+            formatted_routes = [_routes_format_row(row) for row in sorted_results]
+            result_text = f"Found {len(sorted_results)} route(s):\n\n" + "\n\n".join(formatted_routes)
             
             # Convert results to structured format
-            routes_data = [_routes_row_to_dict(row) for row in results]
+            routes_data = [_routes_row_to_dict(row) for row in sorted_results]
             
             # Add presentation format instructions to structured content
             structured_content = {"routes": routes_data}
             if len(results) > 1:
-                structured_content["formatting_instructions"] = "Use a table when presenting multiple routes. Provide personalized recommendations based on user preferences (experience level, distance, difficulty). After showing routes, suggest checking weather with get_mountain_weather if not already done."
+                structured_content["formatting_instructions"] = "Keep your response brief. Do not repeat route details (name, difficulty, distance, elevation gain, etc.) as they're already displayed in the widget. Instead, provide personalized route recommendations: suggest the best route based on the user's experience level (beginner, intermediate, advanced), briefly explain why it's a good choice, and warn about routes that may be too challenging. After showing routes, suggest checking weather for the summit with get_mountain_weather if not already done."
+            
+            meta = _tool_invocation_meta(routes_widget)
             
             return types.CallToolResult(
                 content=[types.TextContent(type="text", text=result_text)],
                 structuredContent=structured_content,
+                _meta=meta,
             )
 
     except Exception as e:
@@ -686,7 +762,7 @@ async def _get_mountain_info(arguments: Dict) -> types.CallToolResult:
         
         # Add formatting instructions
         # Note: mountain_url is already in mountain_data, and description should be included if present
-        formatting_instructions = "Present the mountain information clearly. Include the description of the peak if provided in the mountain data. Add the link for more information if mountain_url is available. Do not add any other media (images, videos, etc.) in the answer. Do not guess or make up route information - always use the get_mountain_routes tool to get actual route data. After presenting the information, propose to see the routes or check the weather."
+        formatting_instructions = "Keep your response brief. Do not repeat the mountain information (name, elevation, rank, county, etc.) as it's already displayed in the widget. Instead, focus on insights: share interesting facts about the peak, explain what makes it special or challenging, and provide context about its significance. Include the description of the peak if provided in the mountain data. Add the link for more information if mountain_url is available. Do not add any other media (images, videos, etc.) in the answer. Do not guess or make up route information - always use the get_mountain_routes tool to get actual route data. After presenting the information, propose to get recommendation for the routes or the weather for the summit."
         
         widget_data["formatting_instructions"] = formatting_instructions
         
@@ -911,30 +987,59 @@ async def _get_mountain_weather(arguments: Dict) -> types.CallToolResult:
             'forecast': []
         }
         
+        def extract_temperature(temp):
+            """Extract temperature value from NWS API response (handles both number and object formats)."""
+            if temp is None:
+                return None
+            if isinstance(temp, dict):
+                return temp.get('value')
+            return temp
+        
+        def extract_temperature_unit(temp, default_unit):
+            """Extract temperature unit from NWS API response."""
+            if isinstance(temp, dict):
+                unit_code = temp.get('unitCode', '')
+                # Handle wmoUnit:degF format
+                if 'degF' in unit_code:
+                    return 'F'
+                elif 'degC' in unit_code:
+                    return 'C'
+            return default_unit
+        
+        def extract_probability(pop):
+            """Extract probability value from NWS API response (handles both number and object formats)."""
+            if pop is None:
+                return None
+            if isinstance(pop, dict):
+                return pop.get('value')
+            return pop
+        
         if periods:
             current = periods[0]
+            temp = current.get('temperature')
             weather_data['current_conditions'] = {
-                'temperature': current.get('temperature'),
-                'temperatureUnit': current.get('temperatureUnit'),
+                'temperature': extract_temperature(temp),
+                'temperatureUnit': extract_temperature_unit(temp, current.get('temperatureUnit', 'F')),
                 'wind_speed': current.get('windSpeed'),
                 'wind_direction': current.get('windDirection'),
                 'short_forecast': current.get('shortForecast'),
                 'detailed_forecast': current.get('detailedForecast'),
-                'probabilityOfPrecipitation': current.get('probabilityOfPrecipitation'),
+                'probabilityOfPrecipitation': extract_probability(current.get('probabilityOfPrecipitation')),
                 'icon': current.get('icon')
             }
         
         # Get forecast for next few days
         for period in periods[1:FORECAST_PERIODS + 1]:  # Get next periods
+            temp = period.get('temperature')
             weather_data['forecast'].append({
                 'name': period.get('name'),
-                'temperature': period.get('temperature'),
-                'temperatureUnit': period.get('temperatureUnit'),
+                'temperature': extract_temperature(temp),
+                'temperatureUnit': extract_temperature_unit(temp, period.get('temperatureUnit', 'F')),
                 'wind_speed': period.get('windSpeed'),
                 'wind_direction': period.get('windDirection'),
                 'short_forecast': period.get('shortForecast'),
                 'detailed_forecast': period.get('detailedForecast'),
-                'probabilityOfPrecipitation': period.get('probabilityOfPrecipitation'),
+                'probabilityOfPrecipitation': extract_probability(period.get('probabilityOfPrecipitation')),
                 'icon': period.get('icon')
             })
         
@@ -987,12 +1092,15 @@ async def _get_mountain_weather(arguments: Dict) -> types.CallToolResult:
         # Add presentation format instructions to structured content
         structured_content = {
             "weather": weather_data,
-            "formatting_instructions": "Use a table for multi-day forecasts. Use emojis to represent weather conditions (☀️ sunny, ⛅ partly sunny, ☁️ cloudy, 💨 windy, 🌫️ foggy, 🌧️ rain, ❄️ snow, ⛈️ storms). Provide advice on the best day to go based on weather conditions."
+            "formatting_instructions": "Keep your response brief. Do not repeat weather data (temperature, wind speed, forecast details, etc.) as it's already displayed in the widget. Instead, provide a clear 'Recommendation of the Day' - identify the best day(s) to climb, briefly explain why (e.g., lower wind, clearer skies), warn about dangerous conditions, and provide actionable advice. Use emojis to represent weather conditions (☀️ sunny, ⛅ partly sunny, ☁️ cloudy, 💨 windy, 🌫️ foggy, 🌧️ rain, ❄️ snow, ⛈️ storms) when helpful. Propose to check the routes if not already done to get the best route for the conditions."
         }
+        
+        meta = _tool_meta(weather_widget)
         
         return types.CallToolResult(
             content=[types.TextContent(type="text", text=result_text)],
             structuredContent=structured_content,
+            _meta=meta,
         )
         
     except Exception as e:
@@ -1030,7 +1138,7 @@ async def _list_tools() -> List[types.Tool]:
         types.Tool(
             name="get_mountains",
             title="Get Mountains",
-            description="Search and filter Colorado 14er mountains. Returns mountain details including name, elevation, rank, range, county, location, and nearby towns. Results are displayed in an interactive map widget. Use this when users ask about mountains, peaks, hiking, elevation, or geographic information. Presentation format: use a table when presenting multiple mountains. After showing results, suggest: checking details for a specific mountain, finding routes, or checking weather.",
+            description="Search and filter Colorado 14er mountains. Returns mountain details including name, elevation, rank, range, county, location, and nearby towns. Results are displayed in an interactive map widget. Use this when users ask about mountains, peaks, hiking, elevation, or geographic information.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -1093,7 +1201,7 @@ async def _list_tools() -> List[types.Tool]:
         types.Tool(
             name="get_mountain_routes",
             title="Get Routes",
-            description="Get climbing routes for Colorado 14ers. Returns route details including difficulty, distance, elevation gain, risk factors, and snow/standard status. Use this when users ask about routes, trails, or route planning. Presentation format: use a table when presenting multiple routes, provide personalized recommendations based on user preferences (experience level, distance, difficulty). After showing routes, suggest checking weather if not already done.",
+            description="Get climbing routes for Colorado 14ers. Returns route details including difficulty, distance, elevation gain, risk factors, and snow/standard status. Results are displayed in an interactive list widget. Use this when users ask about routes, trails, or route planning.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -1161,6 +1269,7 @@ async def _list_tools() -> List[types.Tool]:
                 },
                 "additionalProperties": False,
             },
+            _meta=_tool_meta(routes_widget),
             annotations={
                 "destructiveHint": False,
                 "openWorldHint": False,
@@ -1170,7 +1279,7 @@ async def _list_tools() -> List[types.Tool]:
         types.Tool(
             name="get_mountain_info",
             title="Get Mountain Information",
-            description="Get detailed information about a specific Colorado 14er mountain. Returns name, elevation, rank, county, nearby towns, and route count. Results are displayed in a visual widget. Use this when users ask about a specific mountain. After getting mountain info, suggest checking routes or weather.",
+            description="Get detailed information about a specific Colorado 14er mountain. Returns name, elevation, rank, county, nearby towns, and route count. Results are displayed in a visual widget with possibility to see routes and weather for the mountain. Use this when users ask about a specific mountain.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -1192,7 +1301,7 @@ async def _list_tools() -> List[types.Tool]:
         types.Tool(
             name="get_mountain_weather",
             title="Get Weather",
-            description="Get weather forecast for a specific Colorado 14er mountain. Returns current conditions and multi-day forecast with temperature, wind speed/direction, and detailed descriptions. The forecast includes multiple periods (typically day/night cycles). Presentation format: use a table for multi-day forecasts, emojis for weather conditions (☀️ sunny, ⛅ partly sunny, ☁️ cloudy, 💨 windy, 🌫️ foggy, 🌧️ rain, ❄️ snow, ⛈️ storms), and provide advice on the best day to go based on weather conditions.",
+            description="Get weather forecast for a specific Colorado 14er mountain. Returns current conditions and multi-day forecast with temperature, wind speed/direction, and detailed descriptions. Results are displayed in an interactive carousel widget. The forecast includes multiple periods (typically day/night cycles).",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -1204,6 +1313,7 @@ async def _list_tools() -> List[types.Tool]:
                 "required": ["mountain_name"],
                 "additionalProperties": False,
             },
+            _meta=_tool_meta(weather_widget),
             annotations={
                 "destructiveHint": False,
                 "openWorldHint": False,
@@ -1291,6 +1401,22 @@ async def _list_resources() -> List[types.Resource]:
             mimeType=MIME_TYPE,
             _meta=_tool_meta(mountain_info_widget),
         ),
+        types.Resource(
+            name=routes_widget.title,
+            title=routes_widget.title,
+            uri=routes_widget.template_uri,
+            description=_resource_description(routes_widget),
+            mimeType=MIME_TYPE,
+            _meta=_tool_meta(routes_widget),
+        ),
+        types.Resource(
+            name=weather_widget.title,
+            title=weather_widget.title,
+            uri=weather_widget.template_uri,
+            description=_resource_description(weather_widget),
+            mimeType=MIME_TYPE,
+            _meta=_tool_meta(weather_widget),
+        ),
     ]
 
 
@@ -1313,6 +1439,22 @@ async def _list_resource_templates() -> List[types.ResourceTemplate]:
             description=_resource_description(mountain_info_widget),
             mimeType=MIME_TYPE,
             _meta=_tool_meta(mountain_info_widget),
+        ),
+        types.ResourceTemplate(
+            name=routes_widget.title,
+            title=routes_widget.title,
+            uriTemplate=routes_widget.template_uri,
+            description=_resource_description(routes_widget),
+            mimeType=MIME_TYPE,
+            _meta=_tool_meta(routes_widget),
+        ),
+        types.ResourceTemplate(
+            name=weather_widget.title,
+            title=weather_widget.title,
+            uriTemplate=weather_widget.template_uri,
+            description=_resource_description(weather_widget),
+            mimeType=MIME_TYPE,
+            _meta=_tool_meta(weather_widget),
         ),
     ]
 
@@ -1341,6 +1483,10 @@ async def _handle_read_resource(req: types.ReadResourceRequest) -> types.ServerR
         widget_name = "mountains"
     elif widget_instance.identifier == "mountain-info":
         widget_name = "mountain-info"
+    elif widget_instance.identifier == "routes-list":
+        widget_name = "routes"
+    elif widget_instance.identifier == "weather-carousel":
+        widget_name = "weather"
     
     fresh_html = _load_widget_html(widget_name)
 
